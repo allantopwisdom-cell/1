@@ -1,0 +1,4 @@
+#!/bin/sh
+# No defaults are written. The tweak treats a missing key as 0 (off) and the
+# preference pane has a matching default, so stock behavior is preserved.
+exit 0

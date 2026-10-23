@@ -1,0 +1,8 @@
+#!/bin/sh
+# Best-effort thermal reset on uninstall. The injected dylib is removed from the
+# injection path by the package manager, so a fresh thermalmonitord loads without
+# this tweak; this is only a defensive signal while the old instance still runs.
+if command -v notifyutil >/dev/null 2>&1; then
+    notifyutil -p com.minis.powercuff-r3vamp-roothide.settingschanged >/dev/null 2>&1 || true
+fi
+exit 0
