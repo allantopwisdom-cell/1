@@ -65,16 +65,16 @@ static void PCRPublishMode(void) {
         PCRQueue = dispatch_queue_create("com.minis.powercuff-r3vamp-roothide", DISPATCH_QUEUE_SERIAL);
         if (notify_register_check(PCRThermalsChanged, &PCRStateToken) != NOTIFY_STATUS_OK) return;
         if ([name isEqualToString:@"thermalmonitord"]) {
-            if (notify_register_dispatch(PCRThermalsChanged, &PCREventToken, PCRQueue, ^(int token) {
+            if (notify_register_dispatch(PCRThermalsChanged, &PCREventToken, PCRQueue, ^(int __unused token) {
                 PCRApplyThermals();
             }) != NOTIFY_STATUS_OK) return;
             %init(PCRThermalHooks);
         } else {
-            if (notify_register_dispatch(PCRSettingsChanged, &PCREventToken, PCRQueue, ^(int token) {
+            if (notify_register_dispatch(PCRSettingsChanged, &PCREventToken, PCRQueue, ^(int __unused token) {
                 PCRPublishMode();
             }) != NOTIFY_STATUS_OK) return;
             [[NSNotificationCenter defaultCenter] addObserverForName:NSProcessInfoPowerStateDidChangeNotification
-                                                             object:nil queue:nil usingBlock:^(NSNotification *note) {
+                                                             object:nil queue:nil usingBlock:^(NSNotification *__unused note) {
                 dispatch_async(PCRQueue, ^{ PCRPublishMode(); });
             }];
             dispatch_async(PCRQueue, ^{ PCRPublishMode(); });
