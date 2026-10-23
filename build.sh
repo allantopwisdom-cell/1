@@ -15,4 +15,4 @@ fi
 
 export THEOS_PACKAGE_SCHEME=roothide
 make clean || true
-make messages=yes
+make package messages=yes
