@@ -1,0 +1,8 @@
+Package: com.minis.powercuff-r3vamp-trusted
+Name: PowerCuff R3 Trusted RootHide
+Depends: mobilesubstrate (>= 0.9.9000) | roothide-bootstrap, preferenceloader, firmware (>= 16.0)
+Version: 1.0.0-1
+Architecture: iphoneos-arm64e
+Maintainer: Minis
+Description: PowerCuff thermal simulation profiles for RootHide. Defaults to off. Does not freeze background processes or enforce a frame rate cap.
+Section: Tweaks

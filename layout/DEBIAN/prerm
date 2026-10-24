@@ -1,0 +1,11 @@
+#!/bin/sh
+# Write off to this package's private domain on remove/purge/upgrade, then
+# notify the tweak. This never edits legacy PowerCuff domains.
+if command -v defaults >/dev/null 2>&1; then
+    defaults write com.minis.powercuff-r3vamp-trusted PowerMode -int 0 >/dev/null 2>&1 || true
+    defaults write com.minis.powercuff-r3vamp-trusted RequireLowPowerMode -bool false >/dev/null 2>&1 || true
+fi
+if command -v notifyutil >/dev/null 2>&1; then
+    notifyutil -p com.minis.powercuff-r3vamp-trusted.settingschanged >/dev/null 2>&1 || true
+fi
+exit 0

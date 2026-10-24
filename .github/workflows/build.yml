@@ -1,0 +1,70 @@
+name: Build PowerCuff R3 Trusted RootHide
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+  THEOS: ${{ github.workspace }}/theos-roothide
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Theos environment
+        run: |
+          echo "$THEOS/bin" >> "$GITHUB_PATH"
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+          echo "THEOS_IGNORE_PARALLEL_BUILDING_NOTICE=yes" >> "$HOME/.theosrc"
+      - name: Checkout RootHide Theos
+        uses: actions/checkout@v4
+        with:
+          repository: roothide/theos
+          path: theos-roothide
+          submodules: recursive
+      - name: Install iPhoneOS 16.5 SDK
+        run: |
+          set -euo pipefail
+          mkdir -p "$THEOS/sdks"
+          if [ ! -d "$THEOS/sdks/iPhoneOS16.5.sdk" ]; then
+            stage="$(mktemp -d)"
+            trap 'rm -rf "$stage"' EXIT
+            git clone --depth 1 --filter=blob:none --sparse https://github.com/theos/sdks.git "$stage/sdks"
+            git -C "$stage/sdks" sparse-checkout set iPhoneOS16.5.sdk
+            cp -R "$stage/sdks/iPhoneOS16.5.sdk" "$THEOS/sdks/"
+          fi
+      - name: Install package tools
+        run: |
+          brew install ldid dpkg xz
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+      - name: Build deb
+        run: |
+          sh build.sh roothide
+          test -n "$(find packages -type f -name '*.deb' -print -quit)"
+          dpkg-deb -I packages/*.deb
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: powercuff-r3vamp-trusted-roothide
+          path: packages/*.deb
+          if-no-files-found: error
+      - name: Release on workflow dispatch or main push
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ github.token }}
+          tag_name: trusted-${{ github.run_number }}
+          name: PowerCuff R3 Trusted RootHide #${{ github.run_number }}
+          files: packages/*.deb
