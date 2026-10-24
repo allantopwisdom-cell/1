@@ -56,6 +56,13 @@ static void ApplyThermals(void) {
 - (NSInteger)getPowerMode;
 @end
 
+static void PCRThermalNotification(CFNotificationCenterRef center, void *observer,
+                                   CFStringRef name, const void *object,
+                                   CFDictionaryRef userInfo) {
+    (void)center; (void)observer; (void)name; (void)object; (void)userInfo;
+    ApplyThermals();
+}
+
 static void LoadSettings(void) {
     CFPropertyListRef powerMode = CFPreferencesCopyValue(CFSTR("PowerMode"),
         CFSTR(PC_DOMAIN), kCFPreferencesCurrentUser, kCFPreferencesCurrentHost);
@@ -82,6 +89,13 @@ static void LoadSettings(void) {
     notify_post(PC_THERMALS_CHANGED);
 }
 
+static void PCRSettingsNotification(CFNotificationCenterRef center, void *observer,
+                                    CFStringRef name, const void *object,
+                                    CFDictionaryRef userInfo) {
+    (void)center; (void)observer; (void)name; (void)object; (void)userInfo;
+    LoadSettings();
+}
+
 %group SpringBoard
 
 %hook SpringBoard
@@ -101,12 +115,12 @@ static void LoadSettings(void) {
 
     if (strcmp(path, "thermalmonitord") == 0) {
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL,
-            (void *)ApplyThermals, CFSTR(PC_THERMALS_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
+            PCRThermalNotification, CFSTR(PC_THERMALS_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
         %init(thermalmonitord);
     } else {
         CFNotificationCenterRef center = CFNotificationCenterGetDarwinNotifyCenter();
         CFNotificationCenterAddObserver(center, NULL,
-            (void *)LoadSettings, CFSTR(PC_SETTINGS_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
+            PCRSettingsNotification, CFSTR(PC_SETTINGS_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
         LoadSettings();
         %init(SpringBoard);
     }
