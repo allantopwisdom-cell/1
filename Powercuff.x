@@ -15,7 +15,7 @@ extern char ***_NSGetArgv(void);
 - (void)putDeviceInThermalSimulationMode:(NSString *)simulationMode;
 @end
 
-static CommonProduct *currentProduct;
+static __weak CommonProduct *currentProduct;
 static int token;
 
 static NSString *stringForThermalMode(uint64_t thermalMode) {
@@ -31,7 +31,8 @@ static NSString *stringForThermalMode(uint64_t thermalMode) {
 static void ApplyThermals(void) {
     uint64_t thermalMode = 0;
     notify_get_state(token, &thermalMode);
-    [currentProduct putDeviceInThermalSimulationMode:stringForThermalMode(thermalMode)];
+    CommonProduct *product = currentProduct;
+    [product putDeviceInThermalSimulationMode:stringForThermalMode(thermalMode)];
 }
 
 %group thermalmonitord
@@ -46,14 +47,6 @@ static void ApplyThermals(void) {
     return product;
 }
 
-- (void)dealloc {
-    // Clear the cached product before the object is destroyed; this runs
-    // before %orig, so it never touches the object after it is freed.
-    if (currentProduct == self) {
-        currentProduct = nil;
-    }
-    %orig;
-}
 %end
 
 %end
