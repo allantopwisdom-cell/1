@@ -1,0 +1,1 @@
+{ entry = { bundle = "VersionBridgePrefs"; cell = PSLinkCell; detail = VBRootController; label = "版本伪装"; isController = 1; }; }
