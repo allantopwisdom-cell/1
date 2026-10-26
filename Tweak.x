@@ -8,6 +8,7 @@ static int gTokenLoaded = -1;
 static int gTokenMatched = -1;
 static int gTokenSys = -1;
 static int gTokenApp = -1;
+static int gTokenFile = -1;
 
 static void VBSetState(int token, uint64_t value) {
     if (token >= 0) notify_set_state(token, value);
@@ -21,41 +22,56 @@ static NSString *gAppVersion;
 static NSString *gAppBuild;
 
 /* The preference daemon does not hand this domain to every sandboxed app on
-   RootHide, so fall back to reading the plist straight out of jbroot. The
-   jailbreak path is derived from this dylib's own location:
-   <jbroot>/Library/MobileSubstrate/DynamicLibraries/<this>.dylib */
-static NSString *VBPreferencesPlistPath(void) {
+   RootHide, so fall back to reading the plist straight out of jbroot.
+   The jailbreak root is resolved through the ".jbroot" symlink that RootHide
+   keeps next to every directory containing a Mach-O file; because ellekit
+   symlinks the DynamicLibraries directory, walking a fixed number of levels up
+   is not reliable, so several candidates are tried. */
+static NSString *const VBAppsKey = @"apps";
+static NSString *const VBPlistLeaf =
+    @"var/mobile/Library/Preferences/com.example.versionbridgerh.plist";
+
+static NSArray<NSString *> *VBCandidatePlistPaths(void) {
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
     Dl_info info;
-    if (dladdr((const void *)&gSpoofSystem, &info) == 0) return nil;
-    if (!info.dli_fname) return nil;
-    NSString *selfPath = [NSString stringWithUTF8String:info.dli_fname];
-    NSString *dir = [[selfPath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
-    NSString *root = [dir stringByDeletingLastPathComponent];
-    if (!root.length) return nil;
-    return [root stringByAppendingPathComponent:
-            @"var/mobile/Library/Preferences/com.example.versionbridgerh.plist"];
+    if (dladdr((const void *)&gSpoofSystem, &info) && info.dli_fname) {
+        NSString *dylibPath = [NSString stringWithUTF8String:info.dli_fname];
+        NSString *dir = [dylibPath stringByDeletingLastPathComponent];
+
+        NSString *jbroot = [[dir stringByAppendingPathComponent:@".jbroot"]
+                                stringByResolvingSymlinksInPath];
+        if (jbroot.length) {
+            [out addObject:[jbroot stringByAppendingPathComponent:VBPlistLeaf]];
+        }
+        NSString *cursor = dir;
+        for (int i = 0; i < 6 && cursor.length > 1; i++) {
+            [out addObject:[cursor stringByAppendingPathComponent:VBPlistLeaf]];
+            cursor = [cursor stringByDeletingLastPathComponent];
+        }
+    }
+    [out addObject:[@"/" stringByAppendingPathComponent:VBPlistLeaf]];
+    return out;
 }
 
 static NSDictionary *VBReadAppsDictionary(void) {
     CFStringRef domain = CFSTR("com.example.versionbridgerh");
     CFPreferencesAppSynchronize(domain);
-    id apps = CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR("apps"), domain));
-    if ([apps isKindOfClass:[NSDictionary class]]) return apps;
-
-    NSArray<NSString *> *candidates = [NSArray array];
-    NSString *jailbroken = VBPreferencesPlistPath();
-    if (jailbroken) candidates = [candidates arrayByAddingObject:jailbroken];
-    candidates = [candidates arrayByAddingObject:
-                  @"/var/mobile/Library/Preferences/com.example.versionbridgerh.plist"];
-
-    for (NSString *path in candidates) {
-        NSDictionary *root = [NSDictionary dictionaryWithContentsOfFile:path];
-        id dict = [root isKindOfClass:[NSDictionary class]] ? root[@"apps"] : nil;
-        if ([dict isKindOfClass:[NSDictionary class]]) return dict;
+    id viaPrefs = CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR("apps"), domain));
+    if ([viaPrefs isKindOfClass:[NSDictionary class]]) {
+        VBSetState(gTokenFile, 2);   /* 2 = delivered by cfprefsd */
+        return viaPrefs;
     }
+
+    for (NSString *path in VBCandidatePlistPaths()) {
+        NSDictionary *root = [NSDictionary dictionaryWithContentsOfFile:path];
+        if (![root isKindOfClass:[NSDictionary class]]) continue;
+        VBSetState(gTokenFile, 1);   /* 1 = read the plist file directly */
+        id apps = root[VBAppsKey];
+        if ([apps isKindOfClass:[NSDictionary class]]) return apps;
+    }
+    VBSetState(gTokenFile, 0);
     return nil;
 }
-
 
 static NSOperatingSystemVersion VBParseVersion(NSString *s) {
     NSArray *a = [s componentsSeparatedByString:@"."];
@@ -121,6 +137,7 @@ static NSOperatingSystemVersion VBParseVersion(NSString *s) {
         notify_register_check("com.example.versionbridgerh.diag.matched", &gTokenMatched);
         notify_register_check("com.example.versionbridgerh.diag.sys", &gTokenSys);
         notify_register_check("com.example.versionbridgerh.diag.app", &gTokenApp);
+        notify_register_check("com.example.versionbridgerh.diag.file", &gTokenFile);
 
         NSString *bundle = [[NSBundle mainBundle] bundleIdentifier];
         if (!bundle.length || [bundle hasPrefix:@"com.apple."]) return;
