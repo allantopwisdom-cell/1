@@ -1,6 +1,16 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <CoreFoundation/CoreFoundation.h>
+#import <notify.h>
+
+static int gTokenLoaded = -1;
+static int gTokenMatched = -1;
+static int gTokenSys = -1;
+static int gTokenApp = -1;
+
+static void VBSetState(int token, uint64_t value) {
+    if (token >= 0) notify_set_state(token, value);
+}
 
 static BOOL gSpoofSystem = NO;
 static BOOL gSpoofApp = NO;
@@ -51,7 +61,7 @@ static NSOperatingSystemVersion VBParseVersion(NSString *s) {
     if (gSpoofApp && self == [NSBundle mainBundle] && info) {
         NSMutableDictionary *copy = [info mutableCopy];
         copy[@"CFBundleShortVersionString"] = gAppVersion;
-        copy[@"CFBundleVersion"] = gAppBuild;
+        if (gAppBuild) copy[@"CFBundleVersion"] = gAppBuild;
         return copy;
     }
     return info;
@@ -59,7 +69,7 @@ static NSOperatingSystemVersion VBParseVersion(NSString *s) {
 - (id)objectForInfoDictionaryKey:(NSString *)key {
     if (gSpoofApp && self == [NSBundle mainBundle]) {
         if ([key isEqualToString:@"CFBundleShortVersionString"]) return gAppVersion;
-        if ([key isEqualToString:@"CFBundleVersion"]) return gAppBuild;
+        if (gAppBuild && [key isEqualToString:@"CFBundleVersion"]) return gAppBuild;
     }
     return %orig;
 }
@@ -68,8 +78,14 @@ static NSOperatingSystemVersion VBParseVersion(NSString *s) {
 
 %ctor {
     @autoreleasepool {
+        notify_register_check("com.example.versionbridgerh.diag.loaded", &gTokenLoaded);
+        notify_register_check("com.example.versionbridgerh.diag.matched", &gTokenMatched);
+        notify_register_check("com.example.versionbridgerh.diag.sys", &gTokenSys);
+        notify_register_check("com.example.versionbridgerh.diag.app", &gTokenApp);
+
         NSString *bundle = [[NSBundle mainBundle] bundleIdentifier];
         if (!bundle.length || [bundle hasPrefix:@"com.apple."]) return;
+        VBSetState(gTokenLoaded, 1);
         // CFPreferences uses the shared preference domain, not the app's own defaults.
         CFStringRef domain = CFSTR("com.example.versionbridgerh");
         CFPreferencesAppSynchronize(domain);
@@ -77,15 +93,18 @@ static NSOperatingSystemVersion VBParseVersion(NSString *s) {
         if (![apps isKindOfClass:[NSDictionary class]]) return;
         NSDictionary *config = apps[bundle];
         if (![config isKindOfClass:[NSDictionary class]] || ![config[@"enabled"] boolValue]) return;
+        VBSetState(gTokenMatched, 1);
         NSString *sys = config[@"systemVersion"];
         NSString *version = config[@"appVersion"];
         NSString *build = config[@"appBuild"];
         gSpoofSystem = [config[@"spoofSystem"] boolValue] && [sys isKindOfClass:[NSString class]] && sys.length;
-        gSpoofApp = [config[@"spoofApp"] boolValue] && [version isKindOfClass:[NSString class]] && version.length && [build isKindOfClass:[NSString class]] && build.length;
+        gSpoofApp = [config[@"spoofApp"] boolValue] && [version isKindOfClass:[NSString class]] && version.length;
         if (!gSpoofSystem && !gSpoofApp) return;
+        VBSetState(gTokenSys, gSpoofSystem ? 1 : 0);
+        VBSetState(gTokenApp, gSpoofApp ? 1 : 0);
         gSystemVersion = [sys copy];
         gAppVersion = [version copy];
-        gAppBuild = [build copy];
+        gAppBuild = ([build isKindOfClass:[NSString class]] && build.length) ? [build copy] : nil;
         %init(VBHooks);
     }
 }

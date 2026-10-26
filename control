@@ -1,6 +1,6 @@
 Package: com.example.versionbridgerh
 Name: VersionBridgeRH
-Version: 0.2.1
+Version: 0.2.2
 Architecture: iphoneos-arm64e
 Depends: mobilesubstrate (>= 0.9.9000), preferenceloader, firmware (>= 15.0)
 Description: Per-app system/app version compatibility overrides with a Chinese Settings panel (RootHide).
