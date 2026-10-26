@@ -14,13 +14,19 @@ static void VBSetState(int token, uint64_t value) {
 }
 
 
+static BOOL gSpoofSystem = NO;
+static BOOL gSpoofApp = NO;
+static NSString *gSystemVersion;
+static NSString *gAppVersion;
+static NSString *gAppBuild;
+
 /* The preference daemon does not hand this domain to every sandboxed app on
    RootHide, so fall back to reading the plist straight out of jbroot. The
    jailbreak path is derived from this dylib's own location:
    <jbroot>/Library/MobileSubstrate/DynamicLibraries/<this>.dylib */
 static NSString *VBPreferencesPlistPath(void) {
     Dl_info info;
-    if (!dladdr((__bridge const void *)VBPreferencesPlistPath, &info)) return nil;
+    if (dladdr((const void *)&gSpoofSystem, &info) == 0) return nil;
     if (!info.dli_fname) return nil;
     NSString *selfPath = [NSString stringWithUTF8String:info.dli_fname];
     NSString *dir = [[selfPath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
@@ -50,11 +56,6 @@ static NSDictionary *VBReadAppsDictionary(void) {
     return nil;
 }
 
-static BOOL gSpoofSystem = NO;
-static BOOL gSpoofApp = NO;
-static NSString *gSystemVersion;
-static NSString *gAppVersion;
-static NSString *gAppBuild;
 
 static NSOperatingSystemVersion VBParseVersion(NSString *s) {
     NSArray *a = [s componentsSeparatedByString:@"."];
