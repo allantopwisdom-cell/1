@@ -7,11 +7,34 @@
     self = [super initForContentSize:size];
     return self;
 }
+- (NSDictionary *)defaultValues {
+    return @{@"enabled": @NO, @"spoofSystem": @YES, @"systemVersion": @"17.6.1",
+             @"spoofApp": @YES, @"appVersion": @"99.0.0", @"appBuild": @"999999"};
+}
+
+/* The switches show defaults for keys that were never written, so the panel can
+   look enabled while nothing is stored and the tweak sees no configuration.
+   Materialise the defaults as soon as the page is opened, so what is displayed
+   is what the tweak will actually read. */
+- (void)persistDefaultsIfNeeded {
+    if (!self.appID.length) return;
+    NSMutableDictionary *all = VBAllApps();
+    NSMutableDictionary *config = [all[self.appID] mutableCopy] ?: [NSMutableDictionary dictionary];
+    BOOL changed = NO;
+    for (NSString *key in [self defaultValues]) {
+        if (!config[key]) { config[key] = [self defaultValues][key]; changed = YES; }
+    }
+    if (!changed) return;
+    all[self.appID] = config;
+    VBSaveAllApps(all);
+}
+
 - (void)setSpecifier:(PSSpecifier *)specifier {
     [super setSpecifier:specifier];
     self.appID = [specifier propertyForKey:@"bundleID"];
     self.appName = [specifier propertyForKey:@"appName"];
     self.title = self.appName;
+    [self persistDefaultsIfNeeded];
 }
 - (NSArray *)specifiers {
     if (_specifiers) return _specifiers;
@@ -44,8 +67,7 @@
     NSDictionary *config = VBAllApps()[self.appID ?: @""];
     id value = config[key];
     if (value) return value;
-    NSDictionary *defaults = @{@"enabled": @NO, @"spoofSystem": @YES, @"systemVersion": @"17.6.1", @"spoofApp": @YES, @"appVersion": @"99.0.0", @"appBuild": @"999999"};
-    return defaults[key];
+    return [self defaultValues][key];
 }
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)s {
     if (!self.appID.length) return;
@@ -53,6 +75,9 @@
     if (!key.length) return;
     NSMutableDictionary *all = VBAllApps();
     NSMutableDictionary *config = [all[self.appID] mutableCopy] ?: [NSMutableDictionary dictionary];
+    for (NSString *k in [self defaultValues]) {
+        if (!config[k]) config[k] = [self defaultValues][k];
+    }
     if (value) config[key] = value;
     all[self.appID] = config;
     VBSaveAllApps(all);

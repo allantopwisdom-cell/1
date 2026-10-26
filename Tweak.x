@@ -2,6 +2,7 @@
 #import <UIKit/UIKit.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <notify.h>
+#import <dlfcn.h>
 
 static int gTokenLoaded = -1;
 static int gTokenMatched = -1;
@@ -10,6 +11,43 @@ static int gTokenApp = -1;
 
 static void VBSetState(int token, uint64_t value) {
     if (token >= 0) notify_set_state(token, value);
+}
+
+
+/* The preference daemon does not hand this domain to every sandboxed app on
+   RootHide, so fall back to reading the plist straight out of jbroot. The
+   jailbreak path is derived from this dylib's own location:
+   <jbroot>/Library/MobileSubstrate/DynamicLibraries/<this>.dylib */
+static NSString *VBPreferencesPlistPath(void) {
+    Dl_info info;
+    if (!dladdr((__bridge const void *)VBPreferencesPlistPath, &info)) return nil;
+    if (!info.dli_fname) return nil;
+    NSString *selfPath = [NSString stringWithUTF8String:info.dli_fname];
+    NSString *dir = [[selfPath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
+    NSString *root = [dir stringByDeletingLastPathComponent];
+    if (!root.length) return nil;
+    return [root stringByAppendingPathComponent:
+            @"var/mobile/Library/Preferences/com.example.versionbridgerh.plist"];
+}
+
+static NSDictionary *VBReadAppsDictionary(void) {
+    CFStringRef domain = CFSTR("com.example.versionbridgerh");
+    CFPreferencesAppSynchronize(domain);
+    id apps = CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR("apps"), domain));
+    if ([apps isKindOfClass:[NSDictionary class]]) return apps;
+
+    NSArray<NSString *> *candidates = [NSArray array];
+    NSString *jailbroken = VBPreferencesPlistPath();
+    if (jailbroken) candidates = [candidates arrayByAddingObject:jailbroken];
+    candidates = [candidates arrayByAddingObject:
+                  @"/var/mobile/Library/Preferences/com.example.versionbridgerh.plist"];
+
+    for (NSString *path in candidates) {
+        NSDictionary *root = [NSDictionary dictionaryWithContentsOfFile:path];
+        id dict = [root isKindOfClass:[NSDictionary class]] ? root[@"apps"] : nil;
+        if ([dict isKindOfClass:[NSDictionary class]]) return dict;
+    }
+    return nil;
 }
 
 static BOOL gSpoofSystem = NO;
@@ -87,9 +125,7 @@ static NSOperatingSystemVersion VBParseVersion(NSString *s) {
         if (!bundle.length || [bundle hasPrefix:@"com.apple."]) return;
         VBSetState(gTokenLoaded, 1);
         // CFPreferences uses the shared preference domain, not the app's own defaults.
-        CFStringRef domain = CFSTR("com.example.versionbridgerh");
-        CFPreferencesAppSynchronize(domain);
-        NSDictionary *apps = CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR("apps"), domain));
+        NSDictionary *apps = VBReadAppsDictionary();
         if (![apps isKindOfClass:[NSDictionary class]]) return;
         NSDictionary *config = apps[bundle];
         if (![config isKindOfClass:[NSDictionary class]] || ![config[@"enabled"] boolValue]) return;
